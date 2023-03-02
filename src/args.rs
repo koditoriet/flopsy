@@ -36,7 +36,11 @@ pub struct Args {
     /// If the given path is a directory instead of a shell script, all scripts in the directory will
     /// be called in alphabetical order before new connections are accepted.
     #[arg(short='f', long)]
-    pub on_failover: Option<PathBuf>
+    pub on_failover: Option<PathBuf>,
+
+    /// If set, the proxy will not try to pick a primary until the first client connection arrives.
+    #[arg(short, long, default_value="false")]
+    pub lazy_init: bool,
 }
 
 impl Args {

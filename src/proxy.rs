@@ -18,11 +18,32 @@ impl Proxy {
 
     /// Starts the receiver failover proxy and keeps running perpetually.
     pub async fn run(mut self) {
+        if self.args.lazy_init {
+            eprintln!("lazy init requested; not selecting an initial primary");
+            return
+        } else {
+            if !self.select_initial_primary().await {
+                eprintln!("no primary available; exiting");
+                return
+            }
+        }
         let listener = self.bind().await;
         loop {
             match listener.accept().await {
                 Ok((conn, _)) => self.handle_connection(conn).await.unwrap_or(()),
                 Err(err) => eprintln!("couldn't accept incoming connection: {}", err),
+            }
+        }
+    }
+
+    async fn select_initial_primary(&mut self) -> bool {
+        match self.handle_failover().await {
+            Ok(mut stream) => {
+                stream.shutdown().await.unwrap();
+                true
+            }
+            Err(_) => {
+                false
             }
         }
     }
@@ -37,13 +58,16 @@ impl Proxy {
     async fn connect_to_primary(&mut self) -> std::io::Result<TcpStream> {
         match TcpStream::connect(&self.primary_host).await {
             Ok(stream) => Ok(stream),
-            Err(_) => self.handle_failover().await,
+            Err(error) => {
+                eprintln!("primary '{}' unavailable: {}", self.primary_host, error);
+                self.handle_failover().await
+            },
         }
     }
 
     /// Selects a new primary and runs all failover triggers on it.
     async fn handle_failover(&mut self) -> std::io::Result<TcpStream> {
-        eprintln!("primary host '{}' is unreachable; trying to find a new one", self.primary_host);
+        eprintln!("selecting a new primary...");
         for host in &self.args.hosts {
             eprintln!("trying host '{}'", host);
             let stream = match TcpStream::connect(host).await {
