@@ -3,7 +3,7 @@ RUN apk add --no-cache musl-dev
 WORKDIR /build
 
 # Cache dependencies as long as no versions have changed.
-COPY Cargo.toml Cargo.lock .
+COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src/bin && \
     echo "fn main() {}" > src/bin/flopsy.rs && \
     cargo build --release && \
