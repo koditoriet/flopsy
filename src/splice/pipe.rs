@@ -2,13 +2,14 @@ use std::ptr::null_mut;
 use libc::{c_int, SPLICE_F_MOVE, __errno_location, O_NONBLOCK, SPLICE_F_NONBLOCK, EAGAIN, EWOULDBLOCK};
 
 pub(crate) struct Pipe {
-    pub read_fd: i32,
-    pub write_fd: i32
+    read_fd: i32,
+    write_fd: i32
 }
 
 pub(crate) enum Error { EAgain, Other(i32) }
 type Result<T> = std::result::Result<T, Error>;
 
+/// A bidirectional pipe which can be interacted with using the splice syscall.
 impl Pipe {
     pub fn new() -> Pipe {
         let mut pipes = std::mem::MaybeUninit::<[c_int; 2]>::uninit();
@@ -21,11 +22,13 @@ impl Pipe {
         }
     }
 
+    /// Read data from the given fd into the pipe.
     #[inline(always)]
     pub fn splice_from(&self, src_fd: i32, len: usize) -> Result<usize> {
         splice(src_fd, self.write_fd, len)
     }
 
+    /// Write data from the pipe into the given fd.
     #[inline(always)]
     pub fn splice_into(&self, dst_fd: i32, len: usize) -> Result<usize> {
         splice(self.read_fd, dst_fd, len)
@@ -41,7 +44,6 @@ impl Drop for Pipe {
     }
 }
 
-#[inline(always)]
 fn splice(src_fd: i32, dst_fd: i32, len: usize) -> Result<usize> {
     unsafe {
         let bytes_copied = libc::splice(

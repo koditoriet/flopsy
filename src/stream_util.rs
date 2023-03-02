@@ -6,6 +6,8 @@ use crate::splice::{copy_data, create_pipe};
 #[cfg(not(feature = "splice"))]
 use crate::bufcopy::{copy_data, create_pipe};
 
+/// Forwards data from client_stream to server_stream and vice versa,
+/// until either stream is closed on the other end.
 pub(crate) async fn bridge_streams(mut client_stream: TcpStream, mut server_stream: TcpStream) {
     client_stream.set_nodelay(true).unwrap_or(());
     server_stream.set_nodelay(true).unwrap_or(());
@@ -22,6 +24,8 @@ pub(crate) async fn bridge_streams(mut client_stream: TcpStream, mut server_stre
     server_stream.shutdown().await.unwrap_or(());
 }
 
+/// Waits for one of the given streams to become readable,
+/// then returns (readable_stream, other_stream).
 #[inline(always)]
 async fn select_readable<'a>(a: &'a mut TcpStream, b: &'a mut TcpStream) -> (&'a mut TcpStream, &'a mut TcpStream) {
     select! {

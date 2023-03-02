@@ -8,6 +8,7 @@ pub struct Proxy {
 }
 
 impl Proxy {
+    /// Creates a new failover proxy.
     pub fn create(args: Args) -> Self {
         Self {
             primary_host: String::from(""),
@@ -15,6 +16,7 @@ impl Proxy {
         }
     }
 
+    /// Starts the receiver failover proxy and keeps running perpetually.
     pub async fn run(mut self) {
         let listener = self.bind().await;
         loop {
@@ -39,6 +41,7 @@ impl Proxy {
         }
     }
 
+    /// Selects a new primary and runs all failover triggers on it.
     async fn handle_failover(&mut self) -> std::io::Result<TcpStream> {
         eprintln!("primary host '{}' is unreachable; trying to find a new one", self.primary_host);
         for host in &self.args.hosts {
@@ -62,6 +65,8 @@ impl Proxy {
         Err(std::io::Error::new(std::io::ErrorKind::Other, "no primary found"))
     }
 
+    /// Returns true if the given host is eligible to be a primary,
+    /// otherwise returns false.
     async fn check_primary(&self, host: &String) -> bool {
         match &self.args.check_host {
             None => true,
@@ -75,6 +80,8 @@ impl Proxy {
         }
     }
 
+    /// Run all failover triggers in turn, with the given connection string
+    /// as their only argument.
     async fn run_failover_triggers(&self, host: &String) {
         if let Some(path) = &self.args.on_failover {
             eprintln!("running failover triggers on host '{}'", self.primary_host);
@@ -99,6 +106,7 @@ impl Proxy {
     }
 }
 
+/// Run the given executable with the given connection string as its only argument.
 async fn run_trigger(trigger: &PathBuf, host: &String) {
     eprintln!("running trigger '{}' on host '{}'", trigger.to_str().unwrap(), host);
     match Command::new(&trigger).arg(host).status().await {
@@ -112,12 +120,22 @@ async fn run_trigger(trigger: &PathBuf, host: &String) {
     }
 }
 
+/// Returns a list of files found at the given path.
+/// Either the path itself, if the path is a file, or all files contained in
+/// the directory indicated by the path, if the path is a directory.
 fn collect_files(path: &PathBuf) -> Vec<PathBuf> {
     if path.is_file() {
         vec![path.clone()]
     } else if path.is_dir() {
         let mut files = path.read_dir().unwrap()
-            .map(|x| x.unwrap().path())
+            .filter_map(|x| {
+                let path = x.unwrap().path();
+                if path.is_file() {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<PathBuf>>();
         files.sort();
         files

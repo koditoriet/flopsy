@@ -7,10 +7,12 @@ pub(crate) fn create_pipe() -> pipe::Pipe {
     pipe::Pipe::new()
 }
 
+/// Copies data from src to dst using the splice syscall.
+/// Only works on Linux, as that's the only platform with the splice syscall.
 pub(crate) async fn copy_data(pipe: &pipe::Pipe, src: &mut TcpStream, dst: &mut TcpStream) -> std::io::Result<()> {
     let src_fd = src.as_raw_fd();
     let dst_fd = dst.as_raw_fd();
-    let max_tx_size = 16384;
+    let max_tx_size = 65536;
     let mut count = 0;
     let mut status = Ok(());
     while count < max_tx_size {
