@@ -10,6 +10,7 @@ libc = { version = "0.2", optional = true }
 tokio = { version = "1.25", features = ["full"] }
 
 [features]
+default = ["splice"]
 splice = ["dep:libc"]
 
 [profile.release]
