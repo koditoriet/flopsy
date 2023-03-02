@@ -39,7 +39,7 @@ pub struct Args {
     pub on_failover: Option<PathBuf>,
 
     /// Max number of seconds to wait between attempts to select a new primary.
-    #[arg(short='b', long="max-backoff", default_value="60")]
+    #[arg(short='B', long="max-backoff", default_value="60")]
     pub max_primary_selection_backoff_secs: u32,
 }
 
