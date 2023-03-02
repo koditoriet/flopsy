@@ -10,7 +10,7 @@ if [ "$HOSTS" != "" ] ; then
     HOST_OPT="-H $HOSTS"
 fi
 
-CHECK_SCRIPT=/etc/flopsy/check-node.sh
+CHECK_SCRIPT=/etc/flopsy/check-host.sh
 if [ -f $CHECK_SCRIPT ] ; then
     if [ -x $CHECK_SCRIPT ] ; then
         CHECK_OPT="-c $CHECK_SCRIPT"
