@@ -54,6 +54,17 @@ exec ping -c1 $(echo $1 | sed -e 's/:.*$//')
 For more information, see `flopsy --help`.
 
 
+## Running in Docker
+The flopsy docker image can be configured using the following environment variables:
+- `PORT`: port on which to listen for connections. Equivalent to `--port`.
+- `HOSTS`: comma-separated list from which to select a primary backend. Equivalent to `--hosts`
+- `MAX_BACKOFF`: Maximum time to wait between attempts to reselect a new primary after the first one goes down. Equivalent to `--max-backoff`.
+
+Additionally, the following paths are checked for scripts, which may be mounted or otherwise injected into the container:
+- `/etc/flopsy/check-host.sh`: used as check script, if present.
+- `/etc/flopsy/triggers.d`: any files in this directory will be executed as trigger scripts.
+
+
 ## FAQ
 - Help, the build fails on non-Linux OSes!
   - Flopsy by default depends on the `splice` system call, which is only available on Linux.
