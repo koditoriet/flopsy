@@ -5,5 +5,8 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.1", features = ["derive"] }
-libc = "0.2"
+libc = { version = "0.2", optional = true }
 tokio = { version = "1.25", features = ["full"] }
+
+[features]
+splice = ["dep:libc"]

@@ -3,6 +3,10 @@ use tokio::net::TcpStream;
 
 pub mod pipe;
 
+pub(crate) fn create_pipe() -> pipe::Pipe {
+    pipe::Pipe::new()
+}
+
 pub(crate) async fn copy_data(pipe: &pipe::Pipe, src: &mut TcpStream, dst: &mut TcpStream) -> std::io::Result<()> {
     let src_fd = src.as_raw_fd();
     let dst_fd = dst.as_raw_fd();
