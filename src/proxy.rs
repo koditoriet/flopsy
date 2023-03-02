@@ -1,49 +1,30 @@
-use std::path::PathBuf;
-use tokio::{net::{TcpListener, TcpStream}, process::Command, io::AsyncWriteExt};
+use std::{path::PathBuf, time::Duration, cmp::min};
+use tokio::{net::{TcpListener, TcpStream}, process::Command, io::AsyncWriteExt, time::sleep};
 use crate::{args::Args, stream_util::bridge_streams};
 
 pub struct Proxy {
     args: Args,
-    primary_host: String
+    primary_host: String,
+    listener: Option<TcpListener>,
 }
 
 impl Proxy {
     /// Creates a new failover proxy.
     pub fn create(args: Args) -> Self {
         Self {
-            primary_host: String::from(""),
+            primary_host: "".to_string(),
             args: args,
+            listener: None,
         }
     }
 
     /// Starts the receiver failover proxy and keeps running perpetually.
     pub async fn run(mut self) {
-        if self.args.lazy_init {
-            eprintln!("lazy init requested; not selecting an initial primary");
-            return
-        } else {
-            if !self.select_initial_primary().await {
-                eprintln!("no primary available; exiting");
-                return
-            }
-        }
-        let listener = self.bind().await;
+        self.handle_failover().await;
         loop {
-            match listener.accept().await {
+            match self.listener.as_ref().unwrap().accept().await {
                 Ok((conn, _)) => self.handle_connection(conn).await.unwrap_or(()),
                 Err(err) => eprintln!("couldn't accept incoming connection: {}", err),
-            }
-        }
-    }
-
-    async fn select_initial_primary(&mut self) -> bool {
-        match self.handle_failover().await {
-            Ok(mut stream) => {
-                stream.shutdown().await.unwrap();
-                true
-            }
-            Err(_) => {
-                false
             }
         }
     }
@@ -55,38 +36,37 @@ impl Proxy {
         }
     }
 
-    async fn connect_to_primary(&mut self) -> std::io::Result<TcpStream> {
-        match TcpStream::connect(&self.primary_host).await {
-            Ok(stream) => Ok(stream),
-            Err(error) => {
-                eprintln!("primary '{}' unavailable: {}", self.primary_host, error);
-                self.handle_failover().await
-            },
-        }
-    }
-
     /// Selects a new primary and runs all failover triggers on it.
-    async fn handle_failover(&mut self) -> std::io::Result<TcpStream> {
+    /// Blocks indefinitely until a new primary can be selected.
+    async fn handle_failover(&mut self) {
         eprintln!("selecting a new primary...");
-        for host in &self.args.hosts {
-            eprintln!("trying host '{}'", host);
-            let stream = match TcpStream::connect(host).await {
-                Ok(stream) => stream,
-                Err(_) => {
-                    eprintln!("host '{}' discarded because it is unreachable", host);
-                    continue
-                },
-            };
-            if self.check_primary(host).await {
-                eprintln!("host '{}' selected as the new primary", host);
-                self.primary_host = host.clone();
-                self.run_failover_triggers(host).await;
-                return Ok(stream)
-            } else {
-                eprintln!("host '{}' discarded because it failed the primary check", host)
+        self.listener = None;
+        let mut sleep_duration = Duration::from_secs(1);
+        let max_sleep_duration = Duration::from_secs(self.args.max_primary_selection_backoff_secs as u64);
+        loop {
+            for host in &self.args.hosts {
+                eprintln!("trying host '{}'", host);
+                match TcpStream::connect(host).await {
+                    Ok(mut stream) => stream.shutdown().await.unwrap_or(()),
+                    Err(_) => {
+                        eprintln!("host '{}' discarded because it is unreachable", host);
+                        continue
+                    },
+                };
+                if self.check_primary(host).await {
+                    eprintln!("host '{}' selected as the new primary", host);
+                    self.run_failover_triggers(host).await;
+                    self.primary_host = host.clone();
+                    self.listener = Some(self.bind().await);
+                    return
+                } else {
+                    eprintln!("host '{}' discarded because it failed the primary check", host)
+                }
             }
+            eprintln!("no hosts available; sleeping for {} seconds, then trying again", sleep_duration.as_secs());
+            sleep(sleep_duration).await;
+            sleep_duration = min(max_sleep_duration, sleep_duration*2);
         }
-        Err(std::io::Error::new(std::io::ErrorKind::Other, "no primary found"))
     }
 
     /// Returns true if the given host is eligible to be a primary,
@@ -108,7 +88,7 @@ impl Proxy {
     /// as their only argument.
     async fn run_failover_triggers(&self, host: &String) {
         if let Some(path) = &self.args.on_failover {
-            eprintln!("running failover triggers on host '{}'", self.primary_host);
+            eprintln!("running failover triggers on host '{}'", host);
             for trigger in collect_files(path) {
                 run_trigger(&trigger, host).await
             }
@@ -116,14 +96,16 @@ impl Proxy {
     }
 
     async fn handle_connection(&mut self, mut client_stream: TcpStream) -> std::io::Result<()> {
-        match self.connect_to_primary().await {
+        match TcpStream::connect(&self.primary_host).await {
             Ok(stream) => {
                 tokio::spawn(bridge_streams(client_stream, stream));
                 Ok(())
             },
             Err(error) => {
-                eprintln!("no hosts available; shutting down client connection");
+                eprintln!("couldn't connect to primary; shutting down client connection");
                 client_stream.shutdown().await.unwrap_or(());
+                drop(client_stream);
+                self.handle_failover().await;
                 Err(error)
             },
         }

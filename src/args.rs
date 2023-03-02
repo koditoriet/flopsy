@@ -38,9 +38,9 @@ pub struct Args {
     #[arg(short='f', long)]
     pub on_failover: Option<PathBuf>,
 
-    /// If set, the proxy will not try to pick a primary until the first client connection arrives.
-    #[arg(short, long, default_value="false")]
-    pub lazy_init: bool,
+    /// Max number of seconds to wait between attempts to select a new primary.
+    #[arg(short='b', long="max-backoff", default_value="60")]
+    pub max_primary_selection_backoff_secs: u32,
 }
 
 impl Args {
